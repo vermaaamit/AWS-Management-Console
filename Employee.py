@@ -2,7 +2,7 @@ from flask import Flask, render_template, request
 from pymysql import connections
 import os
 import boto3
-from config import *  # Imports: custombucket, customregion, customhost, customuser, custompass, customdb
+from configure import *  # Imports: custombucket, customregion, customhost, customuser, custompass, customdb
 
 app = Flask(__name__)
 
@@ -89,4 +89,4 @@ def AddEmp():
 # Run app
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-    
+
