@@ -14,7 +14,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # Homepage: Form to submit employee details
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('AddEmp.html')
 
 # Route to handle form submission
 @app.route('/submit', methods=['POST'])
