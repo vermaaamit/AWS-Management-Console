@@ -1,74 +1,41 @@
-from flask import Flask, request, render_template, redirect
-from configure import get_db_connection
-import boto3
+from flask import Flask, render_template, request, redirect, url_for
 import os
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-S3_BUCKET = 'your-s3-bucket-name'
 
-# Initialize S3 client
-s3 = boto3.client('s3')
+# Configuration
+UPLOAD_FOLDER = 'static/uploads/'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-@app.route('/ping')
-def ping():
-    return '✅ Flask is working!'
+# Ensure upload folder exists
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-@app.route("/", methods=["GET", "POST"])
-def home():
-    return render_template("AddEmp.html")
+# Homepage: Form to submit employee details
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-@app.route("/about", methods=["GET"])
-def about():
-    return redirect("https://www.intellipaat.com")
-
-@app.route("/addEmp", methods=["POST"])
-def AddEmp():
+# Route to handle form submission
+@app.route('/submit', methods=['POST'])
+def submit():
+    name = request.form['name']
     emp_id = request.form['emp_id']
-    first_name = request.form['first_name']
-    last_name = request.form['last_name']
-    pri_skill = request.form['pri_skill']
-    location = request.form['location']
-    emp_image_file = request.files['emp_image_file']
+    department = request.form['department']
 
-    if emp_image_file.filename == "":
-        return "❌ Please select a file"
+    # Handle image upload
+    image = request.files['image']
+    if image and image.filename != '':
+        filename = secure_filename(image.filename)
+        image.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        image_url = url_for('static', filename='uploads/' + filename)
+    else:
+        image_url = None
 
-    filename = secure_filename(f"{emp_id}_{emp_image_file.filename}")
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    emp_image_file.save(filepath)
+    return render_template('employee_detail.html', name=name, emp_id=emp_id, department=department, image_url=image_url)
 
-    # Upload image to S3
-    try:
-        s3.upload_file(
-            Filename=filepath,
-            Bucket=S3_BUCKET,
-            Key=filename,
-            ExtraArgs={'ACL': 'public-read'}
-        )
-        image_url = f"https://{S3_BUCKET}.s3.amazonaws.com/{filename}"
-    except Exception as s3_err:
-        return f"❌ S3 Upload Error: {s3_err}"
-
-    # Store employee data in MySQL
-    try:
-        db_conn = get_db_connection()
-        cursor = db_conn.cursor()
-
-        insert_sql = """
-            INSERT INTO employee (emp_id, first_name, last_name, pri_skill, location, emp_image_path)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """
-        cursor.execute(insert_sql, (emp_id, first_name, last_name, pri_skill, location, image_url))
-        db_conn.commit()
-        cursor.close()
-        db_conn.close()
-
-        return f"✅ Employee {first_name} {last_name} added successfully!<br>📷 Image URL: <a href='{image_url}'>{image_url}</a>"
-    except Exception as db_err:
-        return f"❌ Database Error: {db_err}"
-
+# Run the server publicly on port 5000
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
+
 
