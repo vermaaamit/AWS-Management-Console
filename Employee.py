@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect
 from pymysql import connections
 import os
 import boto3
@@ -10,16 +10,21 @@ app = Flask(__name__)
 bucket = custombucket
 region = customregion
 
-db_conn = connections.Connection(
-    host=customhost,
-    port=3306,
-    user=customuser,
-    password=custompass,
-    db=customdb
-)
+try:
+    db_conn = connections.Connection(
+        host=customhost,
+        port=3306,
+        user=customuser,
+        password=custompass,
+        db=customdb
+    )
+except Exception as e:
+    db_conn = None
+    print(f"ERROR: Could not connect to MySQL: {e}")
 
-ouput= {}
+output = {}
 table = 'employee'
+
 # Homepage
 @app.route("/", methods=['GET', 'POST'])
 def home():
@@ -28,11 +33,14 @@ def home():
 # About route
 @app.route("/about", methods=['POST'])
 def about():
-    return render_template('https://www.intellipaat.com')
+    return redirect("https://www.intellipaat.com")
 
 # Add Employee Route
 @app.route("/addemp", methods=['POST'])
 def AddEmp():
+    if db_conn is None:
+        return "Database connection error. Please contact the administrator."
+
     emp_id = request.form['emp_id']
     first_name = request.form['first_name']
     last_name = request.form['last_name']
@@ -58,7 +66,7 @@ def AddEmp():
         s3 = boto3.resource('s3')
         s3.Bucket(bucket).put_object(
             Key=emp_image_file_name_in_s3,
-            Body=emp_image_file
+            Body=emp_image_file.read()
         )
 
         # Generate S3 Image URL
@@ -73,6 +81,8 @@ def AddEmp():
 
         object_url = f"https://s3{s3_region}.amazonaws.com/{bucket}/{emp_image_file_name_in_s3}"
 
+        cursor.close()  # Close the cursor
+
         return f"""
         <h2>Employee data added successfully!</h2>
         <p>Name: {first_name} {last_name}</p>
@@ -84,9 +94,10 @@ def AddEmp():
 
     except Exception as e:
         db_conn.rollback()
+        if cursor:
+            cursor.close()
         return str(e)
 
 # Run app
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-
