@@ -1,29 +1,33 @@
 from flask import Flask, render_template, request, redirect
-from pymysql import connections
-import os
+import pymysql
 import boto3
-from configure import *  # Imports: custombucket, customregion, customhost, customuser, custompass, customdb
+from botocore.exceptions import ClientError
+import os
 
 app = Flask(__name__)
 
-# AWS S3 and MySQL configuration
-bucket = custombucket
-region = customregion
+# AWS Configuration
+bucket = 'av553202'  # Your S3 bucket name
+region = 'us-east-1'  # Your AWS region
 
+# Database Configuration
+db_host = 'employee.c2rsg2uwe0k9.us-east-1.rds.amazonaws.com'
+db_user = 'amitverma'  # Replace with your actual username
+db_password = 'Rajesh1234'  # Replace with your actual password
+db_name = 'employee'  # Replace with your actual database name
+
+# Initialize database connection
 try:
-    db_conn = connections.Connection(
-        host=customhost,
-        port=3306,
-        user=customuser,
-        password=custompass,
-        db=customdb
+    db_conn = pymysql.connect(
+        host=db_host,
+        user=db_user,
+        password=db_password,
+        database=db_name,
+        connect_timeout=5
     )
 except Exception as e:
     db_conn = None
     print(f"ERROR: Could not connect to MySQL: {e}")
-
-output = {}
-table = 'employee'
 
 # Homepage
 @app.route("/", methods=['GET', 'POST'])
@@ -51,53 +55,40 @@ def AddEmp():
     if emp_image_file.filename == "":
         return "Please select a file"
 
-    insert_sql = "INSERT INTO employee VALUES (%s, %s, %s, %s, %s)"
-    cursor = db_conn.cursor()
-
     try:
+        cursor = db_conn.cursor()
+        
         # Insert employee data into RDS
+        insert_sql = "INSERT INTO employee (emp_id, first_name, last_name, pri_skill, location) VALUES (%s, %s, %s, %s, %s)"
         cursor.execute(insert_sql, (emp_id, first_name, last_name, pri_skill, location))
         db_conn.commit()
 
-        # Image file name to be stored in S3
-        emp_image_file_name_in_s3 = f"emp-id-{emp_id}_image_file"
-
         # Upload to S3
-        s3 = boto3.resource('s3')
-        s3.Bucket(bucket).put_object(
-            Key=emp_image_file_name_in_s3,
-            Body=emp_image_file.read()
-        )
-
-        # Generate S3 Image URL
-        s3_client = boto3.client('s3')
-        bucket_location = s3_client.get_bucket_location(Bucket=bucket)
-        s3_region = bucket_location.get('LocationConstraint')
-
-        if s3_region is None:
-            s3_region = ''
-        else:
-            s3_region = '-' + s3_region
-
-        object_url = f"https://s3{s3_region}.amazonaws.com/{bucket}/{emp_image_file_name_in_s3}"
-
-        cursor.close()  # Close the cursor
-
-        return f"""
-        <h2>Employee data added successfully!</h2>
-        <p>Name: {first_name} {last_name}</p>
-        <p>ID: {emp_id}</p>
-        <p>Location: {location}</p>
-        <p>Skill: {pri_skill}</p>
-        <img src="{object_url}" width="200px" alt="Employee Image">
-        """
-
+        s3 = boto3.client('s3')
+        emp_image_file_name_in_s3 = f"emp-id-{emp_id}_image_file"
+        
+        try:
+            s3.upload_fileobj(
+                emp_image_file,
+                bucket,
+                emp_image_file_name_in_s3,
+                ExtraArgs={'ACL': 'public-read'}
+            )
+            
+            # Generate public URL
+            object_url = f"https://{bucket}.s3.{region}.amazonaws.com/{emp_image_file_name_in_s3}"
+            
+            return f"Employee added successfully! Image URL: {object_url}"
+            
+        except ClientError as e:
+            return f"S3 Upload Error: {str(e)}"
+            
     except Exception as e:
         db_conn.rollback()
-        if cursor:
+        return f"Database Error: {str(e)}"
+    finally:
+        if 'cursor' in locals():
             cursor.close()
-        return str(e)
 
-# Run app
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(debug=True)
