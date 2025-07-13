@@ -7,14 +7,11 @@ import os
 app = Flask(__name__)
 
 # AWS Configuration
-bucket = 'av553202'  # Your S3 bucket name
+bucket = ''  # Your S3 bucket name
 region = 'us-east-1'  # Your AWS region
 
 # Database Configuration
-db_host = 'employee.c2rsg2uwe0k9.us-east-1.rds.amazonaws.com'
-db_user = 'amitverma'  # Replace with your actual username
-db_password = 'Rajesh1234'  # Replace with your actual password
-db_name = 'employee'  # Replace with your actual database name
+
 
 # Initialize database connection
 try:
